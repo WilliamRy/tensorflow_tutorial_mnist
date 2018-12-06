@@ -5,21 +5,20 @@ from model import CNN, batch_iterator
 print("Tensorflow version " + tf.__version__)
 
 
-# neural network structure for this sample:
-#
-# · · · · · · · · · ·      (input data, 1-deep)                    X [batch, 28, 28, 1]
-# @ @ @ @ @ @ @ @ @ @   -- conv. layer +BN 6x6x1=>24 stride 1      W1 [5, 5, 1, 24]        B1 [24]
-# ∶∶∶∶∶∶∶∶∶∶∶∶∶∶∶∶∶∶∶                                              Y1 [batch, 28, 28, 6]
-#   @ @ @ @ @ @ @ @     -- conv. layer +BN 5x5x6=>48 stride 2      W2 [5, 5, 6, 48]        B2 [48]
-#   ∶∶∶∶∶∶∶∶∶∶∶∶∶∶∶                                                Y2 [batch, 14, 14, 12]
-#     @ @ @ @ @ @       -- conv. layer +BN 4x4x12=>64 stride 2     W3 [4, 4, 12, 64]       B3 [64]
-#     ∶∶∶∶∶∶∶∶∶∶∶                                                  Y3 [batch, 7, 7, 24] => reshaped to YY [batch, 7*7*24]
-#      \x/x\x\x/ ✞      -- fully connected layer (relu+dropout+BN) W4 [7*7*24, 200]       B4 [200]
-#       · · · ·                                                    Y4 [batch, 200]
-#       \x/x\x/         -- fully connected layer (softmax)         W5 [200, 10]           B5 [10]
-#        · · ·                                                     Y [batch, 10]
-
 class Official_CNN(CNN):
+    # neural network structure for this sample:
+    #
+    # · · · · · · · · · ·      (input data, 1-deep)                    X [batch, 28, 28, 1]
+    # @ @ @ @ @ @ @ @ @ @   -- conv. layer +BN 6x6x1=>24 stride 1      W1 [5, 5, 1, 24]        B1 [24]
+    # ∶∶∶∶∶∶∶∶∶∶∶∶∶∶∶∶∶∶∶                                              Y1 [batch, 28, 28, 6]
+    #   @ @ @ @ @ @ @ @     -- conv. layer +BN 5x5x6=>48 stride 2      W2 [5, 5, 6, 48]        B2 [48]
+    #   ∶∶∶∶∶∶∶∶∶∶∶∶∶∶∶                                                Y2 [batch, 14, 14, 12]
+    #     @ @ @ @ @ @       -- conv. layer +BN 4x4x12=>64 stride 2     W3 [4, 4, 12, 64]       B3 [64]
+    #     ∶∶∶∶∶∶∶∶∶∶∶                                                  Y3 [batch, 7, 7, 24] => reshaped to YY [batch, 7*7*24]
+    #      \x/x\x\x/ ✞      -- fully connected layer (relu+dropout+BN) W4 [7*7*24, 200]       B4 [200]
+    #       · · · ·                                                    Y4 [batch, 200]
+    #       \x/x\x/         -- fully connected layer (softmax)         W5 [200, 10]           B5 [10]
+    #        · · ·                                                     Y [batch, 10]
 
     def __init__(self):
         #super(Official_CNN, self).__init__()
