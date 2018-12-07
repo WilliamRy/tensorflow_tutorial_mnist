@@ -85,7 +85,9 @@ class Official_CNN(BasicDeepLearningModel):
     #        · · ·                                                     Y [batch, 10]
 
     def __init__(self):
-        #super(Official_CNN, self).__init__()
+        self.build()
+
+    def add_placeholders(self):
         # input X: 28x28 grayscale images, the first dimension (None) will index the images in the mini-batch
         self.input = tf.placeholder(tf.float32, [None, 28, 28])
         # correct answers will go here
@@ -97,36 +99,7 @@ class Official_CNN(BasicDeepLearningModel):
         self.pkeep = tf.placeholder(tf.float32)
         self.pkeep_conv = tf.placeholder(tf.float32)
 
-        self.build()
-        self.add_loss()
-        self.add_optimizer()
-        self.stat = self.add_stat()
-
-        self.nstep_summary = 0
-
-    def batchnorm(self, Ylogits, is_training, iteration, offset, convolutional=False):
-        exp_moving_avg = tf.train.ExponentialMovingAverage(0.999, iteration)
-        # adding the iteration prevents from averaging across non-existing iterations
-        bnepsilon = 1e-5
-        if convolutional:
-            mean, variance = tf.nn.moments(Ylogits, [0, 1, 2])
-        else:
-            mean, variance = tf.nn.moments(Ylogits, [0])
-        update_moving_averages = exp_moving_avg.apply([mean, variance])
-        m = tf.cond(is_training, lambda: mean, lambda: exp_moving_avg.average(mean))
-        v = tf.cond(is_training, lambda: variance, lambda: exp_moving_avg.average(variance))
-        Ybn = tf.nn.batch_normalization(Ylogits, m, v, offset, None, bnepsilon)
-        return Ybn, update_moving_averages
-
-    def no_batchnorm(self, Ylogits, is_test, iteration, offset, convolutional=False):
-        return Ylogits, tf.no_op()
-
-    def compatible_convolutional_noise_shape(self, Y):
-        noiseshape = tf.shape(Y)
-        noiseshape = noiseshape * tf.constant([1,0,0,1]) + tf.constant([0,1,1,0])
-        return noiseshape
-
-    def build(self):
+    def add_body(self):
         self.X = tf.expand_dims(self.input, axis=-1)
         # three convolutional layers with their channel counts, and a
         # fully connected layer (tha last layer has 10 softmax neurons)
@@ -193,67 +166,32 @@ class Official_CNN(BasicDeepLearningModel):
             tf.summary.scalar('accu', self.accuracy)
             tf.summary.scalar('lr', self.learning_rate)
             for i in range(24):
-                image = self.W1[:,:,:,i:i+1]
-                image = tf.reshape(image, (1,6,6,1))
-                tf.summary.image('image_'+str(i), image)
+                image = self.W1[:, :, :, i:i + 1]
+                image = tf.reshape(image, (1, 6, 6, 1))
+                tf.summary.image('image_' + str(i), image)
             return tf.summary.merge_all()
 
-    def train_and_test(self, train_data, test_data, sess, batch_size=100, nepoch=500, summary_writer=None, return_loss = False, init = True):
-        if init:
-            sess.run(tf.global_variables_initializer())
-
-        losses = self._train(X = train_data['X'], Y = train_data['Y'],
-                             batch_size=batch_size, nepoch= nepoch,
-                             summary_writer = summary_writer)
-
-        score = self._test(X = test_data['X'], Y = test_data['Y'])
-
-        if return_loss:
-            return score, losses
+    def batchnorm(self, Ylogits, is_training, iteration, offset, convolutional=False):
+        exp_moving_avg = tf.train.ExponentialMovingAverage(0.999, iteration)
+        # adding the iteration prevents from averaging across non-existing iterations
+        bnepsilon = 1e-5
+        if convolutional:
+            mean, variance = tf.nn.moments(Ylogits, [0, 1, 2])
         else:
-            return score
+            mean, variance = tf.nn.moments(Ylogits, [0])
+        update_moving_averages = exp_moving_avg.apply([mean, variance])
+        m = tf.cond(is_training, lambda: mean, lambda: exp_moving_avg.average(mean))
+        v = tf.cond(is_training, lambda: variance, lambda: exp_moving_avg.average(variance))
+        Ybn = tf.nn.batch_normalization(Ylogits, m, v, offset, None, bnepsilon)
+        return Ybn, update_moving_averages
 
-    def add_sess(self, sess):
-        self.sess = sess
+    def no_batchnorm(self, Ylogits, is_test, iteration, offset, convolutional=False):
+        return Ylogits, tf.no_op()
 
-    def _train(self, X, Y, k = 0, batch_size = 31, nepoch = 100, summary_writer = None):
-        losses = []
-        for X_, Y_ in zip(batch_iterator(X, batch_size=batch_size, nepoch=nepoch),
-                        batch_iterator(Y, batch_size=batch_size, nepoch=nepoch)):
-            loss, step, loss_each = self.sess.run([self.loss, self.train_step, self.loss_each],
-                                        feed_dict={self.input: X_, self.Y_: Y_, self.step: k,
-                                                   self.pkeep: 0.75, self.pkeep_conv: 1.0, self.is_training: True})
-            self.sess.run(self.update_ema, feed_dict={self.input: X_, self.Y_: Y_, self.step: k,
-                                                 self.pkeep: 1.0, self.pkeep_conv: 1.0, self.is_training: True})
-            if summary_writer is not None:
-                stat = self.sess.run(self.stat,
-                                     feed_dict = {self.input: X_, self.Y_: Y_, self.step: k,
-                                                   self.pkeep: 0.75, self.pkeep_conv: 1.0, self.is_training: True})
-                summary_writer.add_summary(stat, self.nstep_summary)
-            losses += list(loss_each)
-            self.nstep_summary += 1
-            k += 1
-        return losses
-
-
-    def _test(self, X, Y):
-        pred = self.sess.run(self.predict, feed_dict={self.input: X,
-                                                 self.pkeep: 1.0, self.pkeep_conv: 1.0, self.is_training: False})
-        real = Y
-        score = sum(pred == real) * 1.0 / len(real)
-        return score
-
-    def _predict(self, X):
-        pred = self.sess.run(self.predict_onehot, feed_dict={self.input: X,
-                                                      self.pkeep: 1.0, self.pkeep_conv: 1.0, self.is_training: False})
-        return pred
-
-    def _predict_proba(self, X):
-        pred = self.sess.run(self.output, feed_dict={self.input: X,
-                                                      self.pkeep: 1.0, self.pkeep_conv: 1.0, self.is_training: False})
-        return pred
-
-
+    def compatible_convolutional_noise_shape(self, Y):
+        noiseshape = tf.shape(Y)
+        noiseshape = noiseshape * tf.constant([1,0,0,1]) + tf.constant([0,1,1,0])
+        return noiseshape
 
 class Model:
     def __init__(self, sess = None, summary_writer = None):
@@ -347,30 +285,6 @@ class MyCNN(BasicDeepLearningModel):
                                               activation=activation))
             res = tf.concat(convs, axis=-1)
         return res
-
-
-    def train_and_test(self, train_data, test_data, sess, batch_size=100, nepoch=15000, summary_writer=None):
-
-        sess.run(tf.global_variables_initializer())
-        losses = []
-        k = 0
-        for X, Y in zip(batch_iterator(train_data['X'],batch_size=batch_size, nepoch=nepoch),
-                        batch_iterator(train_data['Y'],batch_size=batch_size, nepoch=nepoch)):
-            stat, loss, step = sess.run([self.stat, self.loss, self.train_step],
-                                        feed_dict={self.input: X, self.Y_: Y, self.step: k})
-            if summary_writer is not None:
-                summary_writer.add_summary(stat, self.nstep_summary)
-            losses.append(loss)
-            self.nstep_summary += 1
-            k += 1
-
-        pred = sess.run(self.predict, feed_dict={self.input: test_data['X']})
-        real = test_data['Y']
-        score = sum(pred == real)*1.0/len(real)
-        return score
-
-
-
 
 
 def batch_iterator(lst, batch_size=100, nepoch=15000):
