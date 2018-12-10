@@ -4,14 +4,14 @@ import tensorflow as tf
 from model import Model
 from feeder import feeder_mnist
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "1" #仅使用第一块显卡
+os.environ["CUDA_VISIBLE_DEVICES"] = "0" #just use first GPU
 config = tf.ConfigProto()
-config.gpu_options.per_process_gpu_memory_fraction = 0.7 #限定使用比例
+config.gpu_options.per_process_gpu_memory_fraction = 0.7 #limit the percentage
 
 #from keras.backend.tensorflow_backend import set_session
-#config.gpu_options.allow_growth = True  #或者自适应分配显存
+#config.gpu_options.allow_growth = True  #auto-adjust memory
 #set_session(tf.Session(config=config))
-# #当使用keras时调用
+#when use keras
 
 print("Tensorflow version " + tf.__version__)
 
