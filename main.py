@@ -13,7 +13,7 @@ config.gpu_options.per_process_gpu_memory_fraction = 0.7 #限定使用比例
 #set_session(tf.Session(config=config))
 # #当使用keras时调用
 
-
+print("Tensorflow version " + tf.__version__)
 
 def run():
     feeder = feeder_mnist() # load data
