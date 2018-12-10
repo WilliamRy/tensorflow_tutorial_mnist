@@ -27,7 +27,7 @@ class BasicDeepLearningModel:
                                     filters=8,
                                     kernel_size=(5, 5),
                                     padding='same',
-                                    activation='tanh',
+                                    activation=tf.nn.tanh,
                                     name='conv_layer1')  # 28,32
             pooling = tf.layers.max_pooling2d(conv, pool_size=(2, 2), strides=(2, 2), name='pooling1')  # 14,8
 
@@ -35,7 +35,7 @@ class BasicDeepLearningModel:
                                     filters=4,
                                     kernel_size=(3, 3),
                                     padding='same',
-                                    activation='tanh',
+                                    activation=tf.nn.tanh,
                                     name='conv_layer2')  # 14,4
             pooling = tf.layers.max_pooling2d(conv, pool_size=(2, 2), strides=(2, 2), name='pooling2')  # 7,4
 
@@ -43,7 +43,7 @@ class BasicDeepLearningModel:
                                     filters=10,
                                     kernel_size=(7, 7),
                                     padding='valid',
-                                    activation='tanh',
+                                    activation=tf.nn.tanh,
                                     name='conv_final')  # 1,10
             self.logits = tf.squeeze(conv, axis=(1, 2))  # [None, 10]
             self.predict_proba = tf.nn.softmax(self.logits)
@@ -83,9 +83,6 @@ class Official_CNN(BasicDeepLearningModel):
     #       · · · ·                                                    Y4 [batch, 200]
     #       \x/x\x/         -- fully connected layer (softmax)         W5 [200, 10]           B5 [10]
     #        · · ·                                                     Y [batch, 10]
-
-    def __init__(self):
-        self.build()
 
     def add_placeholders(self):
         # input X: 28x28 grayscale images, the first dimension (None) will index the images in the mini-batch
@@ -193,6 +190,61 @@ class Official_CNN(BasicDeepLearningModel):
         noiseshape = noiseshape * tf.constant([1,0,0,1]) + tf.constant([0,1,1,0])
         return noiseshape
 
+class MyCNN(BasicDeepLearningModel):
+
+    def add_body(self):
+        input_ = tf.expand_dims(self.input, axis=-1)  # 28,1
+        conv = self.incept(input_, tf.nn.tanh, 'incept1')  # 28,32
+        conv = self.incept(conv, tf.nn.tanh, 'incept2', filter_list=[8, 4, 4], kernel_size_list=[1, 3, 5])  # 28,16
+
+        pooling = tf.layers.max_pooling2d(conv, pool_size=(2, 2), strides=(2, 2), name='pooling1')  # 14,16
+
+        conv = self.incept(pooling, tf.nn.tanh, 'incept3', filter_list=[8, 4, 4], kernel_size_list=[1, 3, 5])  # 14,16
+        pooling = tf.layers.max_pooling2d(conv, pool_size=(2, 2), strides=(2, 2), name='pooling2')  # 7,16
+
+        conv = tf.layers.conv2d(pooling,
+                                filters=32,
+                                kernel_size=(1, 1),
+                                padding='same',
+                                activation=tf.nn.tanh,
+                                name='dense_layer')  # 7,16
+
+        conv = tf.layers.conv2d(conv,
+                                filters=10,
+                                kernel_size=(7, 7),
+                                padding='valid',
+                                activation=tf.nn.tanh,
+                                name='conv_final')  # 1,10
+
+        self.logits = tf.squeeze(conv, axis=(1, 2))  # [None, 10]
+        self.output = tf.nn.softmax(self.logits)
+        self.predict = tf.argmax(self.output, 1)
+        self.predict_onehot = tf.one_hot(self.predict, depth=10)
+        self.confuse = tf.reduce_sum(tf.matmul(tf.expand_dims(self.predict_onehot, -1),
+                                               tf.expand_dims(self.Y_, 1)), 0)
+        self.accuracy = tf.reduce_sum(tf.trace(self.confuse))
+
+    def add_stat(self):
+        with tf.variable_scope('stats'):
+            tf.summary.scalar('loss', self.loss)
+            tf.summary.scalar('accu', self.accuracy)
+            tf.summary.scalar('lr', self.learning_rate)
+            self.stat = tf.summary.merge_all()
+
+    def incept(self, input, activation, scope_name, filter_list=[16, 8, 8], kernel_size_list=[3, 5, 7]):
+        assert len(filter_list) == len(kernel_size_list)
+        with tf.variable_scope(scope_name) as scope:
+            convs = []
+            for filter, kernel_size in zip(filter_list, kernel_size_list):
+                convs.append(tf.layers.conv2d(input,
+                                              filters=filter,
+                                              kernel_size=(kernel_size, kernel_size),
+                                              padding='same',
+                                              activation=activation))
+            res = tf.concat(convs, axis=-1)
+        return res
+
+
 class Model:
     def __init__(self, sess = None, summary_writer = None):
         self.sess = sess
@@ -232,61 +284,6 @@ class Model:
 
 
 
-class MyCNN(BasicDeepLearningModel):
-
-    def add_body(self):
-        input_ = tf.expand_dims(self.input, axis=-1)  # 28,1
-        conv = self.incept(input_, 'tanh', 'incept1')  # 28,32
-        conv = self.incept(conv, 'tanh', 'incept2', filter_list=[8, 4, 4], kernel_size_list=[1, 3, 5])  # 28,16
-
-        pooling = tf.layers.max_pooling2d(conv, pool_size=(2, 2), strides=(2, 2), name='pooling1')  # 14,16
-
-        conv = self.incept(pooling, 'tanh', 'incept3', filter_list=[8, 4, 4], kernel_size_list=[1, 3, 5])  # 14,16
-        pooling = tf.layers.max_pooling2d(conv, pool_size=(2, 2), strides=(2, 2), name='pooling2')  # 7,16
-
-        conv = tf.layers.conv2d(pooling,
-                                filters=32,
-                                kernel_size=(1, 1),
-                                padding='same',
-                                activation='tanh',
-                                name='dense_layer')  # 7,16
-
-        conv = tf.layers.conv2d(conv,
-                                filters=10,
-                                kernel_size=(7, 7),
-                                padding='valid',
-                                activation='tanh',
-                                name='conv_final')  # 1,10
-
-        self.logits = tf.squeeze(conv, axis=(1, 2))  # [None, 10]
-        self.output = tf.nn.softmax(self.logits)
-        self.predict = tf.argmax(self.output, 1)
-        self.predict_onehot = tf.one_hot(self.predict, depth=10)
-        self.confuse = tf.reduce_sum(tf.matmul(tf.expand_dims(self.predict_onehot, -1),
-                                               tf.expand_dims(self.Y_, 1)), 0)
-        self.accuracy = tf.reduce_sum(tf.trace(self.confuse))
-
-    def add_stat(self):
-        with tf.variable_scope('stats'):
-            tf.summary.scalar('loss', self.loss)
-            tf.summary.scalar('accu', self.accuracy)
-            tf.summary.scalar('lr', self.learning_rate)
-            self.stat = tf.summary.merge_all()
-
-    def incept(self, input, activation, scope_name, filter_list=[16, 8, 8], kernel_size_list=[3, 5, 7]):
-        assert len(filter_list) == len(kernel_size_list)
-        with tf.variable_scope(scope_name) as scope:
-            convs = []
-            for filter, kernel_size in zip(filter_list, kernel_size_list):
-                convs.append(tf.layers.conv2d(input,
-                                              filters=filter,
-                                              kernel_size=(kernel_size, kernel_size),
-                                              padding='same',
-                                              activation=activation))
-            res = tf.concat(convs, axis=-1)
-        return res
-
-
 def batch_iterator(lst, batch_size=100, nepoch=15000):
     n = 0
     for i in range(nepoch):
@@ -303,3 +300,4 @@ def _learning_rate_decay(init_lr, global_step):
     warmup_steps = 1000.0
     step = tf.cast(global_step + 1, dtype=tf.float32)
     return init_lr * warmup_steps ** 0.5 * tf.minimum(step * warmup_steps ** -1.5, step ** -0.5)
+
